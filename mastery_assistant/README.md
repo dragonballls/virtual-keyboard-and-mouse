@@ -26,7 +26,7 @@ The Tkinter UI is included with standard Windows Python. Focus detection require
 
 ## API keys
 
-Choose a provider, enter its key, and select **Save key securely**. The key is stored through keyring; the OS credential backend is used when available. The key field is masked. Do not put keys into prompts, recordings, screenshots, or Git. API calls occur only when you explicitly request analysis, with one selected provider and bounded input. Provider model availability and quotas can change; model names are editable.
+Choose a provider, enter its key, and select **Test connection** to make one small real request to that provider. Then select **Save key securely** to store the key through keyring and the OS credential backend when available. The key field is masked. Do not put keys into prompts, recordings, screenshots, or Git. Test and analysis requests may incur provider charges. API calls occur only when you explicitly request them, with one selected provider and bounded input. Provider model availability and quotas can change; model names are editable.
 
 ## Recording and privacy
 

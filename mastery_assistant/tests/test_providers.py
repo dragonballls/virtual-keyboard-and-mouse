@@ -117,3 +117,22 @@ def test_empty_provider_response_is_reported(monkeypatch):
     monkeypatch.setattr(providers, "_request_json", lambda *args, **kwargs: {"candidates": []})
     with pytest.raises(ProviderError, match="did not return a text answer"):
         ask_provider("Gemini", "key", "gemini-test", "system", "review")
+
+
+def test_connection_check_makes_a_tiny_text_only_request(monkeypatch):
+    captured = {}
+    def fake_ask_provider(**kwargs):
+        captured.update(kwargs)
+        return "CONNECTION_OK"
+
+    monkeypatch.setattr(providers, "ask_provider", fake_ask_provider)
+    assert providers.test_provider_connection("Gemini", "key", DEFAULT_MODELS["Gemini"]) == "CONNECTION_OK"
+    assert captured["user_prompt"] == "Reply with exactly this text: CONNECTION_OK"
+    assert captured.get("images_b64", ()) == ()
+    assert len(captured["user_prompt"]) < 100
+
+
+def test_connection_check_rejects_empty_provider_response(monkeypatch):
+    monkeypatch.setattr(providers, "ask_provider", lambda **kwargs: "   ")
+    with pytest.raises(ProviderError, match="empty response"):
+        providers.test_provider_connection("Gemini", "key", DEFAULT_MODELS["Gemini"])

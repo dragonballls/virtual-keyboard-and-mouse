@@ -209,3 +209,20 @@ def ask_provider(
     if answer:
         return answer
     raise ProviderError("Anthropic did not return a text answer.")
+
+
+def test_provider_connection(provider: str, api_key: str, model: str) -> str:
+    """Make one small real request to verify the selected API key and model."""
+    answer = ask_provider(
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        system_prompt=(
+            "You are performing an API connectivity check. Follow the user's short instruction "
+            "exactly and do not add commentary."
+        ),
+        user_prompt="Reply with exactly this text: CONNECTION_OK",
+    )
+    if not isinstance(answer, str) or not answer.strip():
+        raise ProviderError("The provider returned an empty response during the connection test.")
+    return answer.strip()

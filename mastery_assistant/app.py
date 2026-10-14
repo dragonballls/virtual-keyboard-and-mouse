@@ -10,7 +10,7 @@ from tkinter import ttk, filedialog, messagebox
 
 import keyring
 
-from providers import PROVIDERS, DEFAULT_MODELS, SERVICE_NAMES, ask_provider
+from providers import PROVIDERS, DEFAULT_MODELS, SERVICE_NAMES, ask_provider, test_provider_connection
 from recorder import ActionRecorder, app_data_dir, roblox_is_foreground
 from knowledge_store import list_references, load_reference_context, save_reference
 from routine import TARGETS, build_review, compose_ai_request
@@ -75,14 +75,21 @@ class MasteryApp:
         provider_menu.pack(side="left", padx=(6, 14))
         provider_menu.bind("<<ComboboxSelected>>", self._provider_changed)
         ttk.Label(row, text="Model").pack(side="left")
-        ttk.Entry(row, textvariable=self.model, width=31).pack(side="left", padx=6)
-        ttk.Label(row, text="API key").pack(side="left", padx=(8, 4))
-        self.key_entry = ttk.Entry(row, show="•", width=25)
-        self.key_entry.pack(side="left", padx=(0, 6))
-        ttk.Button(row, text="Save key securely", command=self._save_key).pack(side="left")
+        ttk.Entry(row, textvariable=self.model, width=34).pack(side="left", padx=6)
+
+        credentials_row = ttk.Frame(provider_box)
+        credentials_row.pack(fill="x", pady=(6, 0))
+        ttk.Label(credentials_row, text="API key").pack(side="left")
+        self.key_entry = ttk.Entry(credentials_row, show="•", width=48)
+        self.key_entry.pack(side="left", padx=(6, 8), fill="x", expand=True)
+        ttk.Button(credentials_row, text="Save key securely", command=self._save_key).pack(side="left")
+        self.connection_test_button = ttk.Button(
+            credentials_row, text="Test connection", command=self._test_connection
+        )
+        self.connection_test_button.pack(side="left", padx=(6, 0))
         ttk.Label(
             provider_box,
-            text="Keys use the OS credential store. Do not put API keys in prompts, recordings, or Git.",
+            text="Keys use the OS credential store. A connection test makes one small API request and may incur charges.",
             foreground="#666",
         ).pack(anchor="w", pady=(5, 0))
 
@@ -203,6 +210,29 @@ class MasteryApp:
                 "Secure storage unavailable",
                 f"The credential store could not save this key: {exc}\n\nNo key was written to a project file.",
             )
+
+    def _test_connection(self) -> None:
+        key = self._get_key()
+        if not key:
+            messagebox.showwarning("API key required", "Enter an API key or save it securely first.")
+            return
+        provider, model = self.provider.get(), self.model.get().strip()
+        self.connection_test_button.configure(state="disabled")
+        self.status.set(f"Testing the {provider} API connection with one small request…")
+        self._run_background(
+            lambda: test_provider_connection(provider, key, model),
+            on_success=lambda _answer: self._connection_test_finished(provider, model),
+            operation="Connection test",
+            on_finally=lambda: self.connection_test_button.configure(state="normal"),
+        )
+
+    def _connection_test_finished(self, provider: str, model: str) -> None:
+        selected_model = model or DEFAULT_MODELS[provider]
+        self.status.set(f"Connection successful: {provider} responded using {selected_model}.")
+        self.result_text.insert(
+            "end",
+            f"\n\nAPI CONNECTION TEST\nProvider: {provider}\nModel: {selected_model}\nResult: successful response received.",
+        )
 
     def _get_key(self) -> str:
         # Prefer freshly entered text so a replacement key is testable before saving.
