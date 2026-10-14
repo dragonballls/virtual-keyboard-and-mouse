@@ -35,7 +35,7 @@ Gemini is the suggested starter provider. The model name is editable because pro
 
 ## Recording safety
 
-Recording starts only if a Roblox window is focused. The recorder accepts a narrow allowlist of game-control keys and mouse clicks, and rechecks the foreground window before saving an event. It does not record arbitrary typed text. Screenshots are cropped to the Roblox window and downscaled before saving.
+Click Arm F6 recording in the app, then focus Roblox and press F6 to start or stop recording without changing game focus. The recorder accepts a narrow allowlist of game-control keys and mouse clicks, and rechecks the foreground window before saving an event. It does not record arbitrary typed text. Screenshots are cropped to the Roblox window and downscaled before saving. You can also use Stop and save in the app as a fallback; that click will change focus, so use F6 for the cleanest recording.
 
 Local recordings and video notes are stored under %LOCALAPPDATA%\BloxFruitsMasteryAssistant (or ~/.local/share/BloxFruitsMasteryAssistant as fallback). They are excluded from Git by this subproject's .gitignore.
 
