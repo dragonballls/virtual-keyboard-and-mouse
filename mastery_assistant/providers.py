@@ -142,13 +142,14 @@ def ask_provider(
             ]
         else:
             content = user_prompt
+        token_limit = {"max_completion_tokens": 1100} if provider == "OpenAI" else {"max_tokens": 1100}
         body = {
             "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": content},
             ],
-            "max_tokens": 1100,
+            **token_limit,
         }
         url = (
             "https://api.openai.com/v1/chat/completions"

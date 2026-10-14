@@ -39,6 +39,8 @@ def test_openai_request_is_text_only_when_no_images(monkeypatch):
     assert captured["url"] == "https://api.openai.com/v1/chat/completions"
     assert captured["body"]["model"] == "gpt-5.4-mini"
     assert "temperature" not in captured["body"]
+    assert captured["body"]["max_completion_tokens"] == 1100
+    assert "max_tokens" not in captured["body"]
     assert captured["body"]["messages"][1]["content"] == "review"
 
 
@@ -52,6 +54,8 @@ def test_openrouter_headers_and_images_are_in_request(monkeypatch):
     assert ask_provider("OpenRouter", "key", DEFAULT_MODELS["OpenRouter"], "system", "review", ["aGVsbG8="]) == "summary"
     assert captured["headers"]["HTTP-Referer"].startswith("https://github.com/")
     assert "temperature" not in captured["body"]
+    assert captured["body"]["max_tokens"] == 1100
+    assert "max_completion_tokens" not in captured["body"]
     assert captured["body"]["messages"][1]["content"][1]["image_url"]["url"].endswith("aGVsbG8=")
 
 

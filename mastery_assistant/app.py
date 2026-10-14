@@ -95,10 +95,10 @@ class MasteryApp:
         target_menu.pack(side="left", padx=6)
         ttk.Checkbutton(
             row,
-            text="Allow movement even if the prompt does not mention it",
+            text="Include movement discussion even if the prompt does not mention it",
             variable=self.allow_movement,
         ).pack(side="left", padx=12)
-        ttk.Label(settings, text="Movement is off by default. Explicit movement in your prompt can authorize it for that plan.").pack(anchor="w", pady=(5, 0))
+        ttk.Label(settings, text="Movement discussion is excluded by default; this setting only includes it in the review plan. The app never sends gameplay inputs.").pack(anchor="w", pady=(5, 0))
 
         prompt_box = ttk.LabelFrame(outer, text="Describe the routine", padding=8)
         prompt_box.pack(fill="x", pady=(0, 8))
@@ -106,7 +106,7 @@ class MasteryApp:
         self.prompt_text.pack(fill="x")
         self.prompt_text.insert(
             "1.0",
-            "Farm nearby NPCs for sword mastery. Use my configured sword moves, keep attacking while enemies are nearby, and stop if the character gets stuck or the game loses focus.",
+            "Review my gameplay demonstration. Describe visible UI and state changes, and list uncertainties. Do not infer exact key presses from video frames.",
         )
         row = ttk.Frame(prompt_box)
         row.pack(fill="x", pady=(6, 0))
@@ -160,7 +160,7 @@ class MasteryApp:
         self.result_text.pack(fill="both", expand=True)
         self.result_text.insert(
             "1.0",
-            "No plan generated yet. The example prompt requests sword mastery while the target selector is set to Fruit. The app should flag the mismatch instead of silently choosing.",
+            "No review plan generated yet. Add a goal describing what you want to understand from your recording or video. Model output stays advisory; the app never sends gameplay inputs.",
         )
         self.status_label = ttk.Label(outer, textvariable=self.status, wraplength=930)
         self.status_label.pack(fill="x", pady=(8, 0))
