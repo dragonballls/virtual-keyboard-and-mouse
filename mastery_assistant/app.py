@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 import keyring
 
 from providers import PROVIDERS, DEFAULT_MODELS, SERVICE_NAMES, ask_provider
-from recorder import ActionRecorder, app_data_dir
+from recorder import ActionRecorder, app_data_dir, roblox_is_foreground
 from routine import TARGETS, build_review, compose_ai_request
 from video_learning import analyze_video
 
@@ -30,6 +31,9 @@ class MasteryApp:
         self.root.geometry("990x820")
         self.root.minsize(820, 650)
         self.recorder = ActionRecorder()
+        self.recording_armed = False
+        self._last_hotkey_at = 0.0
+        self._hotkey_listener = None
         self.recording_summary = ""
         self.video_notes = ""
         self.video_path = tk.StringVar()
@@ -41,6 +45,7 @@ class MasteryApp:
         self._build_ui()
         self._load_key_for_provider()
         self._load_saved_knowledge()
+        self._start_hotkey_listener()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._refresh_recording_status()
 
@@ -106,7 +111,7 @@ class MasteryApp:
         record_box.pack(fill="x", pady=(0, 8))
         row = ttk.Frame(record_box)
         row.pack(fill="x")
-        self.start_button = ttk.Button(row, text="Start recording", command=self._start_recording)
+        self.start_button = ttk.Button(row, text="Arm F6 recording", command=self._toggle_recording_armed)
         self.start_button.pack(side="left")
         self.stop_button = ttk.Button(row, text="Stop and save", command=self._stop_recording, state="disabled")
         self.stop_button.pack(side="left", padx=6)
@@ -114,7 +119,7 @@ class MasteryApp:
         self.recording_status.pack(side="left", padx=8)
         ttk.Label(
             record_box,
-            text="Records an allowlist of game controls and low-resolution screenshots only while the foreground window title contains Roblox. It does not record arbitrary typed text.",
+            text="Arm recording here, then focus Roblox and press F6 to start or stop while the game has focus. Only an allowlist of game controls and low-resolution screenshots are captured; arbitrary typed text is ignored.",
             wraplength=900,
         ).pack(anchor="w", pady=(5, 0))
 
@@ -221,13 +226,56 @@ class MasteryApp:
         self.result_text.insert("end", "\n\n" + heading + "\n" + answer)
         self.status.set("Cloud analysis complete. The local movement/target restrictions remain authoritative.")
 
+    def _start_hotkey_listener(self) -> None:
+        try:
+            from pynput import keyboard
+            self._hotkey_listener = keyboard.Listener(on_press=self._on_global_key)
+            self._hotkey_listener.start()
+        except Exception as exc:
+            self._hotkey_listener = None
+            self.status.set(f"F6 recording hotkey unavailable: {exc}. Install requirements and restart.")
+
+    def _on_global_key(self, key) -> None:
+        if str(key) != "Key.f6":
+            return
+        now = time.monotonic()
+        if now - self._last_hotkey_at < 0.9:
+            return
+        self._last_hotkey_at = now
+        if not self.recording_armed or not roblox_is_foreground():
+            return
+        try:
+            self.root.after(0, self._toggle_recording_from_game)
+        except Exception:
+            pass
+
+    def _toggle_recording_from_game(self) -> None:
+        if not self.recording_armed:
+            return
+        if self.recorder.active:
+            self._stop_recording()
+        else:
+            self._start_recording()
+
+    def _toggle_recording_armed(self) -> None:
+        if self.recorder.active:
+            self._stop_recording()
+        self.recording_armed = not self.recording_armed
+        self.start_button.configure(
+            text="Disarm F6 recording" if self.recording_armed else "Arm F6 recording"
+        )
+        self.status.set(
+            "Armed: focus Roblox and press F6 to start/stop recording."
+            if self.recording_armed
+            else "Recording hotkey disarmed."
+        )
+
     def _start_recording(self) -> None:
         try:
             path = self.recorder.start()
             self.recording_summary = f"Recording started at local path {path}."
-            self.start_button.configure(state="disabled")
             self.stop_button.configure(state="normal")
-            self.status.set("Recording. Keep the Roblox game focused; unrelated typed text is ignored.")
+            self.status.set("Recording. Press F6 in Roblox to stop, or use Stop and save.")
         except Exception as exc:
             messagebox.showerror("Cannot start recording", str(exc))
             self.status.set("Recording did not start.")
@@ -260,7 +308,10 @@ class MasteryApp:
         except Exception as exc:
             messagebox.showerror("Recording error", str(exc))
         finally:
-            self.start_button.configure(state="normal")
+            self.start_button.configure(
+                state="normal",
+                text="Disarm F6 recording" if self.recording_armed else "Arm F6 recording",
+            )
             self.stop_button.configure(state="disabled")
 
     def _refresh_recording_status(self) -> None:
@@ -330,6 +381,11 @@ class MasteryApp:
         if self.recorder.active:
             try:
                 self.recorder.stop()
+            except Exception:
+                pass
+        if self._hotkey_listener is not None:
+            try:
+                self._hotkey_listener.stop()
             except Exception:
                 pass
         self.root.destroy()
