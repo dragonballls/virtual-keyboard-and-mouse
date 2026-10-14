@@ -5,14 +5,14 @@ import re
 from dataclasses import dataclass, asdict
 from typing import Any
 
-TARGETS = ("Fruit", "Sword", "Gun", "Fighting style")
+TARGETS = ("Fruit", "Fighting style", "General review")
 
 _TARGET_PATTERNS = {
     "Fruit": re.compile(r"\bfruit(?:\s+mastery)?\b", re.I),
-    "Sword": re.compile(r"\bsword(?:s)?(?:\s+mastery)?\b", re.I),
-    "Gun": re.compile(r"\bguns?(?:\s+mastery)?\b", re.I),
     "Fighting style": re.compile(r"\bfighting\s+styles?\b", re.I),
 }
+
+_BLOCKED_WEAPON_PROMPT = re.compile(r"\b(?:swords?|guns?|firearms?|weapons?|knives|knife|blades?)\b", re.I)
 _MOVEMENT_COMMAND = re.compile(
     r"\b(?:move|walk|run|dash|jump|reposition|navigate|travel|approach|follow)\s+"
     r"(?:toward|towards|to|closer|near|away|back|around|left|right|forward|backward|when|if|only|after|until)\b",
@@ -80,8 +80,8 @@ class RoutineReview:
     def format(self) -> str:
         lines = [
             "REVIEW PLAN — ADVISORY ONLY",
-            f"Selected mastery target: {self.selected_target}",
-            f"Target mentioned or implied by prompt: {self.prompt_target or 'Not detected'}",
+            f"Selected review focus: {self.selected_target}",
+            f"Review focus mentioned or implied by prompt: {self.prompt_target or 'Not detected'}",
             f"Movement included in advisory plan: {'YES' if self.movement_allowed else 'NO'}",
             f"Movement rule: {self.movement_reason}",
             f"Reset-if-stuck requested: {'YES' if self.reset_if_stuck else 'NO'}",
@@ -110,16 +110,21 @@ def build_review(prompt: str, selected_target: str, allow_movement_setting: bool
         selected_target = "Fruit"
     prompt_target = infer_target(prompt)
     conflicts: list[str] = []
-    if prompt_target and prompt_target != selected_target:
+    if _BLOCKED_WEAPON_PROMPT.search(prompt):
         conflicts.append(
-            f"Selected target is {selected_target}, but the prompt appears to request {prompt_target} mastery. "
-            "Choose one target before reviewing this demonstration."
+            "This review-only app does not provide weapon-use or attack instructions. "
+            "Use it for neutral footage observations or a non-weapon review goal."
+        )
+    if prompt_target and selected_target != "General review" and prompt_target != selected_target:
+        conflicts.append(
+            f"Selected review focus is {selected_target}, but the prompt appears to request {prompt_target}. "
+            "Choose one review focus before continuing."
         )
     elif prompt and prompt_target is None and any(
-        word in prompt.casefold() for word in ("fruit", "sword", "gun", "fighting style")
+        word in prompt.casefold() for word in ("fruit", "fighting style")
     ):
         conflicts.append(
-            "The prompt mentions more than one or an ambiguous mastery category. Confirm the intended target."
+            "The prompt mentions multiple or ambiguous review focuses. Confirm what you want reviewed."
         )
     if not prompt:
         conflicts.append("Enter a goal before generating a review plan.")
@@ -134,7 +139,7 @@ def build_review(prompt: str, selected_target: str, allow_movement_setting: bool
         movement_reason = "Movement is excluded from the advisory plan because it was not authorized."
 
     steps = [
-        f"Confirm that the selected {selected_target.lower()} category matches the demonstration.",
+        f"Confirm that the selected review focus ({selected_target}) matches the demonstration.",
         "Describe only visible state changes; a recorded keypress or click does not prove an action succeeded.",
         "Check that the game window stayed focused when interpreting recorded events.",
         "Summarize visible progress and uncertainty without claiming hidden or unobserved mastery progress.",
@@ -177,5 +182,6 @@ def compose_ai_request(prompt: str, review: RoutineReview, recording_summary: st
         f"Recorded input summary (untrusted observations):\n{recording_summary[:5000] or 'None provided'}\n\n"
         f"Video-learning notes (untrusted observations):\n{video_notes[:5000] or 'None provided'}\n\n"
         "Return a short interpretation, evidence-supported observations, uncertainties, and checks for the user "
-        "to review. Clearly identify anything that cannot be verified from these observations."
+        "to review. Do not provide weapon-use or attack tactics; stick to neutral visible observations and uncertainty. "
+        "Clearly identify anything that cannot be verified from these observations."
     )

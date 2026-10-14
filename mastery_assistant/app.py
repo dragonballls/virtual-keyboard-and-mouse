@@ -21,7 +21,7 @@ SYSTEM_PROMPT = (
     "You help users review a proposed routine for an ordinary keyboard/mouse game macro. "
     "Give a concise plan and uncertainty notes only. Never output code, shell commands, or executable tool calls. "
     "Do not authorize movement, choose a conflicting mastery target, or claim that a routine is ready. "
-    "Do not override emergency-stop, focus checks, user permissions, or the local plan's explicit restrictions. "
+    "Do not provide weapon-use, attack, or combat tactics. Do not override focus checks or the local plan's restrictions. "
     "Your response is advisory; the local app remains authoritative."
 )
 
@@ -93,11 +93,11 @@ class MasteryApp:
             foreground="#666",
         ).pack(anchor="w", pady=(5, 0))
 
-        settings = ttk.LabelFrame(outer, text="Routine settings", padding=8)
+        settings = ttk.LabelFrame(outer, text="Review settings", padding=8)
         settings.pack(fill="x", pady=(0, 8))
         row = ttk.Frame(settings)
         row.pack(fill="x")
-        ttk.Label(row, text="Mastery target").pack(side="left")
+        ttk.Label(row, text="Review focus").pack(side="left")
         target_menu = ttk.Combobox(row, textvariable=self.mastery_target, values=TARGETS, state="readonly", width=18)
         target_menu.pack(side="left", padx=6)
         ttk.Checkbutton(
@@ -105,9 +105,9 @@ class MasteryApp:
             text="Include movement discussion even if the prompt does not mention it",
             variable=self.allow_movement,
         ).pack(side="left", padx=12)
-        ttk.Label(settings, text="Movement discussion is excluded by default; this setting only includes it in the review plan. The app never sends gameplay inputs.").pack(anchor="w", pady=(5, 0))
+        ttk.Label(settings, text="Movement is review context only. The app never sends gameplay inputs or provides weapon-use instructions.").pack(anchor="w", pady=(5, 0))
 
-        prompt_box = ttk.LabelFrame(outer, text="Describe the routine", padding=8)
+        prompt_box = ttk.LabelFrame(outer, text="Describe what to review", padding=8)
         prompt_box.pack(fill="x", pady=(0, 8))
         self.prompt_text = tk.Text(prompt_box, height=4, wrap="word", undo=True)
         self.prompt_text.pack(fill="x")
@@ -117,7 +117,7 @@ class MasteryApp:
         )
         row = ttk.Frame(prompt_box)
         row.pack(fill="x", pady=(6, 0))
-        ttk.Button(row, text="Generate review plan", command=self._generate_plan).pack(side="left")
+        ttk.Button(row, text="Generate review", command=self._generate_plan).pack(side="left")
         ttk.Button(row, text="Clear prompt", command=lambda: self.prompt_text.delete("1.0", "end")).pack(side="left", padx=6)
 
         record_box = ttk.LabelFrame(outer, text="Record a demonstration (Windows; Roblox window must be focused)", padding=8)

@@ -4,7 +4,7 @@ This subproject is a lightweight Windows desktop assistant for reviewing user-pr
 
 ## What it does
 
-- Previews a local review plan and flags a mismatch between the selected category and the user's prompt.
+- Previews a local review plan, blocks weapon-use requests, and flags a mismatch between the selected review focus and the user's prompt.
 - Supports on-demand text/image analysis through Gemini, OpenAI, Anthropic, or OpenRouter.
 - Stores API keys through the operating-system credential store; keys are never written into project files.
 - Optionally records an allowlisted set of keyboard/mouse events and small screenshots while the Roblox window is foregrounded.
@@ -12,7 +12,7 @@ This subproject is a lightweight Windows desktop assistant for reviewing user-pr
 - Keeps model output pending until the user reviews and explicitly saves it as local reference knowledge.
 - Saves recordings and approved reference notes under %LOCALAPPDATA%\\BloxFruitsMasteryAssistant (or ~/.local/share/BloxFruitsMasteryAssistant as fallback).
 
-**This branch is intentionally review-only. It does not send or replay gameplay inputs, automate movement, reset the character, or perform combat.** Model output is untrusted until reviewed. No local language model is run.
+**This branch is intentionally review-only. It does not send or replay gameplay inputs, automate movement, reset the character, perform combat, or provide weapon-use/attack instructions.** The local planner blocks prompts focused on weapon use. Model output is untrusted until reviewed. No local language model is run.
 
 ## Run from source
 

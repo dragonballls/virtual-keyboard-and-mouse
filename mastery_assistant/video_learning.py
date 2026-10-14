@@ -20,10 +20,10 @@ _ALLOWED_KEYS = frozenset({
 _ALLOWED_BUTTONS = frozenset({"left", "right", "middle"})
 
 VIDEO_SYSTEM = (
-    "Analyze a user-supplied gameplay video to produce human-reviewed observations. Describe only visible "
-    "events, UI indicators, state changes, and uncertainty. Do not invent keypresses or hidden state. Do not "
-    "return code, executable automation instructions, or actions to perform. All findings are advisory notes "
-    "that the user must review."
+    "Analyze a user-supplied gameplay video to produce neutral, human-reviewed observations. Describe only "
+    "visible events, UI indicators, state changes, and uncertainty. Do not invent keypresses or hidden state. "
+    "Do not provide weapon-use, attack, or combat tactics; do not return code, executable automation instructions, "
+    "or actions to perform. All findings are advisory notes that the user must review."
 )
 
 
@@ -108,7 +108,7 @@ def sample_video_frames(path: str, max_frames: int = MAX_VIDEO_FRAMES) -> list[s
 def analyze_video(path: str, provider: str, api_key: str, model: str) -> str:
     frames = sample_video_frames(path, max_frames=MAX_VIDEO_FRAMES)
     prompt = (
-        "Review these sparsely sampled frames from a Blox Fruits gameplay video. Summarize visible events, "
+        "Review these sparsely sampled frames from a gameplay video. Summarize visible events, "
         "recognizable UI indicators, visible game-state changes, and details that remain uncertain. "
         "Do not infer exact key presses or unseen mechanics from frames alone. "
         f"Frames sampled: {len(frames)}."
