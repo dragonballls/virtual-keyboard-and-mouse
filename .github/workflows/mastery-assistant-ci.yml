@@ -27,9 +27,46 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install prototype dependencies
-        run: python -m pip install -r mastery_assistant/requirements.txt
+        working-directory: mastery_assistant
+        run: python -m pip install -r requirements.txt
       - name: Check Python syntax
-        run: python -m compileall -q mastery_assistant
-      - name: Run routine safety tests
+        working-directory: mastery_assistant
+        run: python -m compileall -q .
+      - name: Run regression tests
         working-directory: mastery_assistant
         run: python -m pytest -q
+
+  package-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        working-directory: mastery_assistant
+        run: python -m pip install -r requirements.txt pyinstaller
+      - name: Build portable GUI executable
+        working-directory: mastery_assistant
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name BloxFruitsMasteryAssistant --paths . --collect-all keyring --collect-all PIL --collect-all cv2 --collect-all pynput --collect-all mss --hidden-import win32api --hidden-import win32con --hidden-import win32gui --hidden-import win32timezone launcher.py
+      - name: Smoke-test packaged executable
+        working-directory: mastery_assistant
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "dist\BloxFruitsMasteryAssistant\BloxFruitsMasteryAssistant.exe"
+          if (-not (Test-Path $exe)) { throw "Packaged executable was not created." }
+          if ((Get-Item $exe).Length -lt 100000) { throw "Packaged executable is unexpectedly small." }
+          $process = Start-Process -FilePath $exe -ArgumentList @("--self-test") -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "Packaged self-test failed with exit code $($process.ExitCode)." }
+      - name: Upload portable Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: BloxFruitsMasteryAssistant-Windows-x64
+          path: mastery_assistant/dist/BloxFruitsMasteryAssistant/
+          if-no-files-found: error
+          retention-days: 14
