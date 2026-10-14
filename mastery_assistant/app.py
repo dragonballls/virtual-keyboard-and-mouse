@@ -40,6 +40,7 @@ class MasteryApp:
         self.status = tk.StringVar(value="Ready. Live gameplay input playback is not implemented.")
         self._build_ui()
         self._load_key_for_provider()
+        self._load_saved_knowledge()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._refresh_recording_status()
 
@@ -142,6 +143,16 @@ class MasteryApp:
         self.status_label = ttk.Label(outer, textvariable=self.status, wraplength=930)
         self.status_label.pack(fill="x", pady=(8, 0))
 
+    def _load_saved_knowledge(self) -> None:
+        try:
+            saved = app_data_dir() / "knowledge" / "latest_video_notes.txt"
+            if saved.is_file():
+                self.video_notes = saved.read_text(encoding="utf-8")[:5000]
+                self.status.set("Loaded saved video notes. Cloud requests remain on-demand.")
+        except Exception:
+            # Saved notes are optional; startup should still work if they cannot be read.
+            self.video_notes = ""
+
     def _provider_changed(self, _event=None) -> None:
         name = self.provider.get()
         self.model.set(DEFAULT_MODELS.get(name, ""))
@@ -224,9 +235,28 @@ class MasteryApp:
     def _stop_recording(self) -> None:
         try:
             info = self.recorder.stop()
-            self.recording_summary = json.dumps(info, indent=2)
-            self.recording_summary += "\nInput event data is available locally in recording.json."
-            self.status.set(f"Recording saved. {info['action_count']} allowed input events captured.")
+            source_path = Path(info["directory"]) / "recording.json"
+            source = json.loads(source_path.read_text(encoding="utf-8"))
+            actions = source.get("actions", [])
+            # Preserve a spread of events across the demonstration without sending a huge prompt.
+            sample_limit = 45
+            if len(actions) <= sample_limit:
+                sampled_actions = actions
+            else:
+                indexes = sorted({round(i * (len(actions) - 1) / (sample_limit - 1)) for i in range(sample_limit)})
+                sampled_actions = [actions[i] for i in indexes]
+            frames_dir = Path(info["directory"]) / "frames"
+            frame_count = len(list(frames_dir.glob("*.jpg"))) if frames_dir.exists() else 0
+            self.recording_summary = json.dumps({
+                "duration_seconds": source.get("duration_seconds", info["duration_seconds"]),
+                "action_count": len(actions),
+                "sampled_action_count": len(sampled_actions),
+                "sampled_actions_across_timeline": sampled_actions,
+                "sampled_screenshot_count": frame_count,
+                "recording_path": info["directory"],
+                "note": "Sampled action events and screenshots are reference observations only; no playback is enabled."
+            }, indent=2)[:4700]
+            self.status.set(f"Recording saved. {info['action_count']} allowed input events and {frame_count} screenshots captured.")
         except Exception as exc:
             messagebox.showerror("Recording error", str(exc))
         finally:
