@@ -171,10 +171,14 @@ class MasteryApp:
             )
 
     def _get_key(self) -> str:
+        # Prefer freshly entered text so a replacement key is testable before saving.
+        entered = self.key_entry.get().strip()
+        if entered:
+            return entered
         try:
-            return keyring.get_password("BloxFruitsMasteryAssistant", SERVICE_NAMES[self.provider.get()]) or self.key_entry.get().strip()
+            return keyring.get_password("BloxFruitsMasteryAssistant", SERVICE_NAMES[self.provider.get()]) or ""
         except Exception:
-            return self.key_entry.get().strip()
+            return ""
 
     def _render(self, text: str) -> None:
         self.result_text.delete("1.0", "end")
@@ -183,21 +187,19 @@ class MasteryApp:
     def _generate_plan(self) -> None:
         prompt = self.prompt_text.get("1.0", "end").strip()
         review = build_review(prompt, self.mastery_target.get(), self.allow_movement.get())
-        base = review.format()
-        self._render(base)
+        self._render(review.format())
         if review.conflicts:
-            self.status.set("Resolve the target/prompt conflict before using this routine. No gameplay actions were taken.")
-        else:
-            self.status.set("Review plan generated locally. Live gameplay playback is disabled.")
+            self.status.set("Resolve the target/prompt conflict first. No API request or gameplay action was made.")
+            return
         key = self._get_key()
         if not key:
-            self.status.set(self.status.get() + " Add an API key to request optional cloud commentary.")
+            self.status.set("Review plan generated locally. Add an API key if you want cloud commentary.")
             return
 
         provider = self.provider.get()
         model = self.model.get()
-        self.status.set("Sending one review request to " + provider + "…")
         request_text = compose_ai_request(prompt, review, self.recording_summary, self.video_notes)
+        self.status.set("Sending one review request to " + provider + "…")
         self._run_background(
             lambda: ask_provider(provider, key, model, SYSTEM_PROMPT, request_text),
             on_success=lambda answer: self._append_ai("AI commentary (advisory only):", answer),
@@ -270,8 +272,7 @@ class MasteryApp:
         self.video_notes = notes
         knowledge_dir = app_data_dir() / "knowledge"
         knowledge_dir.mkdir(parents=True, exist_ok=True)
-        notes_path = knowledge_dir / "latest_video_notes.txt"
-        notes_path.write_text(notes, encoding="utf-8")
+        (knowledge_dir / "latest_video_notes.txt").write_text(notes, encoding="utf-8")
         self._render(
             "VIDEO NOTES (observations; verify before reuse)\n\n" + notes
             + "\n\nThese notes will be included in the next plan request. No actions were executed."
