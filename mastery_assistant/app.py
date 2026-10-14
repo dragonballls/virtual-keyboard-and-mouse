@@ -5,14 +5,16 @@ import json
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk, filedialog, messagebox
 
 import keyring
 
 from providers import PROVIDERS, DEFAULT_MODELS, SERVICE_NAMES, ask_provider
 from recorder import ActionRecorder, app_data_dir, roblox_is_foreground
+from knowledge_store import list_references, load_reference_context, save_reference
 from routine import TARGETS, build_review, compose_ai_request
-from video_learning import analyze_video
+from video_learning import analyze_video, analyze_recording
 
 APP_TITLE = "Blox Fruits Mastery Assistant"
 SYSTEM_PROMPT = (
@@ -35,6 +37,10 @@ class MasteryApp:
         self._last_hotkey_at = 0.0
         self._hotkey_listener = None
         self.recording_summary = ""
+        self.recording_path: str | None = None
+        self.pending_knowledge_notes = ""
+        self.pending_knowledge_source = ""
+        self.knowledge_context = ""
         self.video_notes = ""
         self.video_path = tk.StringVar()
         self.provider = tk.StringVar(value="Gemini")
@@ -117,6 +123,13 @@ class MasteryApp:
         self.stop_button.pack(side="left", padx=6)
         self.recording_status = ttk.Label(row, text="Not recording")
         self.recording_status.pack(side="left", padx=8)
+        self.recording_analysis_button = ttk.Button(
+            record_box, text="Analyze last recording + screenshots", command=self._analyze_recording, state="disabled"
+        )
+        self.recording_analysis_button.pack(anchor="w", pady=(6, 0))
+        ttk.Button(
+            record_box, text="Choose saved recording…", command=self._choose_saved_recording
+        ).pack(anchor="w", pady=(4, 0))
         ttk.Label(
             record_box,
             text="Arm recording here, then focus Roblox and press F6 to start or stop while the game has focus. Only an allowlist of game controls and low-resolution screenshots are captured; arbitrary typed text is ignored.",
@@ -133,12 +146,16 @@ class MasteryApp:
         self.video_button.pack(side="left")
         ttk.Label(
             video_box,
-            text="Only up to six resized frames are sent for analysis. Video-only analysis cannot determine the exact keys pressed; pair it with an input recording.",
+            text="Only up to six resized frames are sent for analysis. Recorded demonstrations can align sampled input events with screenshots. Review AI findings before saving them as local knowledge.",
             wraplength=900,
         ).pack(anchor="w", pady=(5, 0))
 
         result_box = ttk.LabelFrame(outer, text="Review plan / AI observations", padding=8)
         result_box.pack(fill="both", expand=True)
+        self.save_notes_button = ttk.Button(
+            result_box, text="Save reviewed analysis as local knowledge", command=self._save_notes_as_knowledge, state="disabled"
+        )
+        self.save_notes_button.pack(anchor="w", pady=(0, 6))
         self.result_text = tk.Text(result_box, wrap="word", height=12)
         self.result_text.pack(fill="both", expand=True)
         self.result_text.insert(
@@ -149,13 +166,14 @@ class MasteryApp:
         self.status_label.pack(fill="x", pady=(8, 0))
 
     def _load_saved_knowledge(self) -> None:
+        # Only notes explicitly approved by the user are reused as reference knowledge.
         try:
-            saved = app_data_dir() / "knowledge" / "latest_video_notes.txt"
-            if saved.is_file():
-                self.video_notes = saved.read_text(encoding="utf-8")[:5000]
-                self.status.set("Loaded saved video notes. Cloud requests remain on-demand.")
+            self.knowledge_context = load_reference_context()
+            self.video_notes = self.knowledge_context
+            if self.knowledge_context:
+                self.status.set("Loaded user-approved local knowledge. Cloud requests remain on-demand.")
         except Exception:
-            # Saved notes are optional; startup should still work if they cannot be read.
+            self.knowledge_context = ""
             self.video_notes = ""
 
     def _provider_changed(self, _event=None) -> None:
@@ -214,7 +232,7 @@ class MasteryApp:
 
         provider = self.provider.get()
         model = self.model.get()
-        request_text = compose_ai_request(prompt, review, self.recording_summary, self.video_notes)
+        request_text = compose_ai_request(prompt, review, self.recording_summary, self.knowledge_context)
         self.status.set("Sending one review request to " + provider + "…")
         self._run_background(
             lambda: ask_provider(provider, key, model, SYSTEM_PROMPT, request_text),
@@ -295,6 +313,8 @@ class MasteryApp:
                 sampled_actions = [actions[i] for i in indexes]
             frames_dir = Path(info["directory"]) / "frames"
             frame_count = len(list(frames_dir.glob("*.jpg"))) if frames_dir.exists() else 0
+            self.recording_path = str(Path(info["directory"]))
+            self.recording_analysis_button.configure(state="normal")
             self.recording_summary = json.dumps({
                 "duration_seconds": source.get("duration_seconds", info["duration_seconds"]),
                 "action_count": len(actions),
@@ -321,6 +341,40 @@ class MasteryApp:
             self.recording_status.configure(text="Not recording")
         self.root.after(500, self._refresh_recording_status)
 
+    def _choose_saved_recording(self) -> None:
+        root_dir = app_data_dir() / "recordings"
+        root_dir.mkdir(parents=True, exist_ok=True)
+        chosen = filedialog.askdirectory(
+            title="Choose a saved demonstration folder",
+            initialdir=str(root_dir),
+        )
+        if not chosen:
+            return
+        if not (Path(chosen) / "recording.json").is_file():
+            messagebox.showwarning("Not a recording", "Choose a folder containing recording.json.")
+            return
+        self.recording_path = chosen
+        self.recording_analysis_button.configure(state="normal")
+        self.status.set("Selected saved recording. Analyze it when ready.")
+
+    def _analyze_recording(self) -> None:
+        if not self.recording_path:
+            messagebox.showwarning("No recording", "Record a demonstration or choose a saved recording folder first.")
+            return
+        key = self._get_key()
+        if not key:
+            messagebox.showwarning("API key required", "Save or enter an API key for the selected provider.")
+            return
+        provider, model, directory = self.provider.get(), self.model.get(), self.recording_path
+        self.recording_analysis_button.configure(state="disabled")
+        self.status.set("Analyzing a capped sample of input events and screenshots with " + provider + "…")
+        self._run_background(
+            lambda: analyze_recording(directory, provider, key, model),
+            on_success=lambda notes: self._analysis_finished(notes, "recording"),
+            operation="Recording analysis",
+            on_finally=lambda: self.recording_analysis_button.configure(state="normal"),
+        )
+
     def _choose_video(self) -> None:
         path = filedialog.askopenfilename(
             title="Choose gameplay video",
@@ -344,21 +398,43 @@ class MasteryApp:
         self.status.set("Sampling a few small frames and sending them to " + provider + "…")
         self._run_background(
             lambda: analyze_video(path, provider, key, model),
-            on_success=self._video_analysis_finished,
+            on_success=lambda notes: self._analysis_finished(notes, "video"),
             operation="Video analysis",
             on_finally=lambda: self.video_button.configure(state="normal"),
         )
 
-    def _video_analysis_finished(self, notes: str) -> None:
-        self.video_notes = notes
-        knowledge_dir = app_data_dir() / "knowledge"
-        knowledge_dir.mkdir(parents=True, exist_ok=True)
-        (knowledge_dir / "latest_video_notes.txt").write_text(notes, encoding="utf-8")
+    def _analysis_finished(self, notes: str, source: str) -> None:
+        # Provider output is pending/untrusted; do not persist it before explicit approval.
+        self.pending_knowledge_notes = notes
+        self.pending_knowledge_source = source
+        self.save_notes_button.configure(state="normal")
+        label = "RECORDED INPUT + SCREENSHOT ANALYSIS" if source == "recording" else "VIDEO FRAME ANALYSIS"
         self._render(
-            "VIDEO NOTES (observations; verify before reuse)\n\n" + notes
-            + "\n\nThese notes will be included in the next plan request. No actions were executed."
+            label + " (unapproved observations; review before saving)\n\n" + notes
+            + "\n\nThese findings will not be added to future prompts until you click Save reviewed analysis as local knowledge."
         )
-        self.status.set("Video analysis saved locally. No action sequence was inferred from frames alone.")
+        self.status.set("Analysis complete. Review it before saving. No gameplay actions were executed.")
+
+    def _save_notes_as_knowledge(self) -> None:
+        notes = self.pending_knowledge_notes.strip()
+        if not notes:
+            messagebox.showwarning("No reviewed findings", "Analyze a video or recording first.")
+            return
+        source = "recording" if self.pending_knowledge_source == "recording" else "video"
+        try:
+            save_reference(
+                title="Reviewed gameplay " + source + " notes",
+                source=source,
+                notes=notes,
+            )
+            self.knowledge_context = load_reference_context()
+            self.video_notes = self.knowledge_context
+            self.pending_knowledge_notes = ""
+            self.save_notes_button.configure(state="disabled")
+            self.status.set(f"Saved locally as approved knowledge. {len(list_references())} references stored on this PC.")
+            self.result_text.insert("end", "\n\nSaved locally as user-approved knowledge.")
+        except Exception as exc:
+            messagebox.showerror("Could not save knowledge", str(exc))
 
     def _run_background(self, task, on_success, operation: str, on_finally=None) -> None:
         def worker() -> None:

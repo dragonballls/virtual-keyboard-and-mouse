@@ -16,10 +16,33 @@ _TARGET_PATTERNS = {
     "Gun": re.compile(r"\bguns?(?:\s+mastery)?\b", re.I),
     "Fighting style": re.compile(r"\bfighting\s+styles?\b", re.I),
 }
-_MOVEMENT_PATTERN = re.compile(
-    r"\b(move|walk|run|dash|jump|reposition|navigate|travel|approach|follow|go to)\b",
+_MOVEMENT_COMMAND = re.compile(
+    r"\b(?:move|walk|run|dash|jump|reposition|navigate|travel|approach|follow)\s+"
+    r"(?:toward|towards|to|closer|near|away|back|around|left|right|forward|backward|when|if|only|after|until)\b",
     re.I,
 )
+_MOVEMENT_PERMISSION = re.compile(
+    r"\b(?:allow|enable|permit|authorize)\s+(?:automatic\s+)?movement\b"
+    r"|\bmovement\s+(?:is\s+)?(?:allowed|enabled|authorized)\b",
+    re.I,
+)
+_MOVEMENT_NEGATION = re.compile(
+    r"\b(?:do\s+not|don't|never|without|avoid|stop)\s+(?:automatically\s+)?"
+    r"(?:move|moving|movement|walk|walking|run|running|dash|dashing|jump|jumping|reposition|navigate|travel|approach|follow)\b",
+    re.I,
+)
+
+
+def explicitly_authorizes_movement(prompt: str) -> bool:
+    """Movement words alone are not permission; look for a positive command."""
+    if _MOVEMENT_PERMISSION.search(prompt or ""):
+        return True
+    for clause in re.split(r"[.!?;\n]+", prompt or ""):
+        if _MOVEMENT_NEGATION.search(clause):
+            continue
+        if _MOVEMENT_COMMAND.search(clause):
+            return True
+    return False
 
 
 @dataclass
@@ -85,7 +108,7 @@ def build_review(prompt: str, selected_target: str, allow_movement_setting: bool
     if not prompt:
         conflicts.append("Enter a goal before generating a plan.")
 
-    explicit_movement = bool(_MOVEMENT_PATTERN.search(prompt))
+    explicit_movement = explicitly_authorizes_movement(prompt)
     movement_allowed = explicit_movement or bool(allow_movement_setting)
     if explicit_movement:
         movement_reason = "The prompt explicitly mentions a movement action; review its scope before use."

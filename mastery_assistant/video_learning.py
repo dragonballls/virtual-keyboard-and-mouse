@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 from providers import ask_provider
@@ -65,3 +66,68 @@ def analyze_video(path: str, provider: str, api_key: str, model: str) -> str:
         f"Frames sampled: {len(frames)}. Do not infer exact key presses without input-event data."
     )
     return ask_provider(provider, api_key, model, VIDEO_SYSTEM, prompt, images_b64=frames)
+
+
+
+def _sample_recording_frames(recording_dir: Path, max_frames: int = 6) -> tuple[list[str], list[int]]:
+    """Read up to six existing low-resolution screenshots from a saved demonstration."""
+    paths = sorted((recording_dir / "frames").glob("frame-*.jpg"))
+    if not paths:
+        return [], []
+    if len(paths) > max_frames:
+        indexes = sorted({round(i * (len(paths) - 1) / (max_frames - 1)) for i in range(max_frames)})
+        paths = [paths[i] for i in indexes]
+    images: list[str] = []
+    offsets: list[int] = []
+    for path in paths:
+        try:
+            images.append(base64.b64encode(path.read_bytes()).decode("ascii"))
+            try:
+                offsets.append((int(path.stem.split("-")[-1]) + 1) * 3)
+            except ValueError:
+                offsets.append(len(offsets) * 3)
+        except OSError:
+            continue
+    return images, offsets
+
+
+def analyze_recording(directory: str, provider: str, api_key: str, model: str) -> str:
+    """Analyze a bounded sample of ordinary input events aligned with saved screenshots."""
+    recording_dir = Path(directory)
+    recording_file = recording_dir / "recording.json"
+    if not recording_file.is_file():
+        raise RuntimeError("The selected folder does not contain recording.json.")
+    try:
+        payload = json.loads(recording_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise RuntimeError("The recording file could not be read.") from None
+    all_events = payload.get("actions", [])
+    if not isinstance(all_events, list):
+        all_events = []
+    max_events = 48
+    events = all_events
+    if len(events) > max_events:
+        indexes = sorted({round(i * (len(events) - 1) / (max_events - 1)) for i in range(max_events)})
+        events = [events[i] for i in indexes]
+    sampled: list[dict] = []
+    allowed = {"type", "t", "key", "button", "x", "y"}
+    for event in events:
+        if isinstance(event, dict):
+            sampled.append({k: event[k] for k in allowed if k in event})
+    images, frame_offsets = _sample_recording_frames(recording_dir)
+    if not sampled and not images:
+        raise RuntimeError("This recording contains no usable input events or screenshots.")
+    prompt = (
+        "Review this user-provided gameplay demonstration. The JSON below contains a bounded sample of "
+        "normal keyboard/mouse events with timestamps in seconds. Screenshots are attached in chronological "
+        "order at approximate offsets (seconds): " + json.dumps(frame_offsets) + ".\\n"
+        "Describe only evidence-supported patterns, visible state changes, possible timing relationships, "
+        "and uncertainties. A keypress/click does not prove the intended action succeeded. Do not invent "
+        "unseen key presses, exact mechanics, or executable instructions. Treat findings as observations "
+        "for the user to review.\\n\\n"
+        f"Duration: {payload.get('duration_seconds', 'unknown')} seconds. Total events: "
+        f"{payload.get('action_count', len(all_events))}.\\n"
+        f"Sampled events: {json.dumps(sampled, ensure_ascii=False)[:6000]}\\n"
+        f"Attached screenshots: {len(images)}."
+    )
+    return ask_provider(provider, api_key, model, VIDEO_SYSTEM, prompt, images_b64=images)

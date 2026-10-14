@@ -48,3 +48,19 @@ def test_infer_target():
     assert infer_target("use my gun") == "Gun"
     assert infer_target("train fighting style") == "Fighting style"
     assert infer_target("fight using fruit and sword") is None
+
+
+
+def test_negative_movement_instruction_does_not_authorize_movement():
+    plan = build_review("Do not move; keep attacking NPCs in range.", "Fruit", False)
+    assert not plan.movement_allowed
+
+
+def test_reset_when_stuck_does_not_authorize_movement():
+    plan = build_review("Attack nearby NPCs and stop moving if stuck.", "Fruit", False)
+    assert not plan.movement_allowed
+
+
+def test_clear_conditional_movement_instruction_is_detected():
+    plan = build_review("Move toward an NPC when it is out of range.", "Fruit", False)
+    assert plan.movement_allowed

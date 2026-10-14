@@ -52,3 +52,13 @@ Local recordings and video notes are stored under %LOCALAPPDATA%\BloxFruitsMaste
 Run tests with: .venv\Scripts\python.exe -m pytest
 
 Current test coverage focuses on target validation and movement authorization policy.
+
+
+## Teaching-loop improvements
+
+- Analyze a recorded demonstration by sending a bounded sample of normal input events and up to six recorded screenshots to one selected provider.
+- Choose and analyze earlier recordings from the local recordings folder.
+- AI analysis stays pending until reviewed and explicitly saved as local knowledge. Unreviewed model output is not reused in future prompts.
+- Approved knowledge is stored under %LOCALAPPDATA%\BloxFruitsMasteryAssistant\knowledge\references.json and is never committed to Git.
+- Movement authorization is conservative: “stop moving if stuck” is not permission; a positive instruction such as “move toward an NPC when out of range” is recognized.
+- Live input playback remains outside this prototype; the app records, analyzes, and prepares reviewable plans.
